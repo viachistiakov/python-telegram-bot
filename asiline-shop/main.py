@@ -1,52 +1,48 @@
 import asyncio
+import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import KeyboardButton, FSInputFile, ReplyKeyboardMarkup
-from api_token import TOKEN
 from aiogram import F
+from api_token import TOKEN
 
 bot = Bot(TOKEN)
 dp = Dispatcher()
 
+# Список пользователей, которые взаимодействовали с ботом
+subscribed_users = set()
 
-images = [
-    ("🔴 Красное изображение", '1 (1).jpg'),
-    ("🟠 Оранжевое изображение", '1 (2).jpg'),
-    ("🟡 Желтое изображение", '1 (3).jpg'),
-    ("🟢 Зеленое изображение", '1 (4).jpg'),
-    ("🔵 Синее изображение", '1 (5).jpg')
-]
-
-# Храним id пользователя, которому нужно пересылать сообщения
-support_user_id = 7232723935  # Замените на ID пользователя @angry_mf
+# Список ID администраторов
+admin_ids = {7232723935}  # Замените на ID администраторов
 
 # Список пользователей, которые активировали поддержку
 support_mode_users = set()
 
-@dp.message(Command('zakaz'))
-async def zakaz_command(message: types.Message, command: Command):
-    if command.args is None:
-        await message.answer('Пожалуйста сообщите: Адрес заказа, Время и дату, Номер заказчика')
-        return
-    try:
-        name1, age, city = command.args.split(' ')
-    except ValueError:
-        await message.answer('Введены не все данные. Пример ввода:\n /zakaz Вишняковская2а 13:30 88005553535')
-        return
-    await message.answer(f'Адрес заказа: {name1}\n'
-                         f'Время заказа: {age}\n'
-                         f'Номер телефона: {city}\n')
+# Состояние поддержки для каждого пользователя
+user_support_state = {}
+
+# Словарь для хранения ID пользователей, которым администратор отвечает
+user_reply_map = {}
+
+# Состояние постинга
+posting_mode = False
+last_uploaded_image = None
+
+# Папка для сохранения изображений
+images_folder = "uploaded_images"
+if not os.path.exists(images_folder):
+    os.makedirs(images_folder)
+
+# Состояние для админа
+admin_state = {}
 
 
-
-
-
-
-
-
-
+# Команда /start
 @dp.message(Command('start'))
 async def start_command(message: types.Message):
+    print(f"Пользователь с ID {message.from_user.id} начал взаимодействие с ботом.")
+    subscribed_users.add(message.from_user.id)
+
     kb = [
         [KeyboardButton(text='🚨Купить')],
         [KeyboardButton(text='🌱Каталог')],
@@ -60,17 +56,16 @@ async def start_command(message: types.Message):
                                          one_time_keyboard=False,
                                          input_field_placeholder='Вы в главном меню')
     my_image = FSInputFile('torf.jpg')
-
-    # Отправка текста с картинкой
-    await message.answer_photo(my_image, caption=
-        'Здравствуйте, это бот компании Asicilene для автоматических заказов',
-        reply_markup=keyboard)
+    await message.answer_photo(my_image, caption='Здравствуйте, это бот компании Asicilene для автоматических заказов',
+                               reply_markup=keyboard)
 
 
+# Команда для перехода в поддержку
 @dp.message(F.text.strip().lower() == '👥связаться с поддержкой в чате')
 async def start_support(message: types.Message):
     # Добавляем пользователя в список тех, кто активировал поддержку
     support_mode_users.add(message.from_user.id)
+    user_support_state[message.from_user.id] = True  # Устанавливаем состояние поддержки как активное
 
     # Создаем клавиатуру с кнопкой выхода из чата
     kb = [
@@ -79,14 +74,17 @@ async def start_support(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
     # Отправляем сообщение с кнопкой выхода
-    await message.answer("Ваши сообщения отправляются напрямую. Чтобы вернуться в главное меню нажмите кнопку ниже", reply_markup=keyboard)
+    await message.answer("Ваши сообщения отправляются напрямую. Чтобы вернуться в главное меню нажмите кнопку ниже",
+                         reply_markup=keyboard)
 
 
+# Команда выхода из чата с поддержкой
 @dp.message(F.text.strip().lower() == '⚡ выйти из чата')
 async def exit_support(message: types.Message):
     # Если пользователь находится в режиме поддержки, удаляем его из списка
     if message.from_user.id in support_mode_users:
         support_mode_users.remove(message.from_user.id)
+        user_support_state[message.from_user.id] = False  # Убираем состояние поддержки для этого пользователя
 
     # Возвращаем пользователя в главное меню
     kb = [
@@ -101,27 +99,147 @@ async def exit_support(message: types.Message):
                                          resize_keyboard=True,
                                          one_time_keyboard=False,
                                          input_field_placeholder='Вы в главном меню')
-    await message.answer("Вы вышли из чата с поддержкой. Если нужно, вы можете вернуться заново.", reply_markup=keyboard)
+    await message.answer("Вы вышли из чата с поддержкой. Если нужно, вы можете вернуться заново.",
+                         reply_markup=keyboard)
 
 
-@dp.message(F.text.strip().lower() == '📱контакты')
-async def with_puree(message: types.Message):
-    phone_number = "+7 968 438-45-13"
-    # Используем моноширинный шрифт с HTML
-    await message.answer(f'Звонок поставщику:  <code>{phone_number}</code>', parse_mode='HTML')
-
-
-@dp.message()
-async def forward_to_support(message: types.Message):
-    # Если пользователь в режиме поддержки, перенаправляем все его сообщения
-    if message.from_user.id in support_mode_users:
-        await bot.forward_message(chat_id=support_user_id, from_chat_id=message.chat.id, message_id=message.message_id)
+# Команда /admin для администратора
+@dp.message(Command('admin'))
+async def admin_command(message: types.Message):
+    if message.from_user.id in admin_ids:
+        kb = [
+            [KeyboardButton(text='Изменить каталог')],
+            [KeyboardButton(text='Перейти в поддержку')],
+            [KeyboardButton(text='Режим постинга')]
+        ]
+        keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+        await message.answer("Вы в админском меню. Выберите нужное действие:", reply_markup=keyboard)
     else:
-        # Можно добавить логику для обычных сообщений
-        pass
+        await message.answer("У вас нет прав для использования админского меню.")
 
 
+# Команда для перехода в поддержку
+@dp.message(F.text.strip().lower() == 'перейти в поддержку')
+async def transition_to_support(message: types.Message):
+    if message.from_user.id in admin_ids:
+        admin_state[message.from_user.id] = 'waiting_for_user_id'  # Переход в режим ожидания ID
+        await message.answer("Пожалуйста, отправьте ID пользователя, которому вы хотите отправить сообщение:")
 
+
+# Обработчик получения ID пользователя от администратора
+@dp.message(lambda message: message.from_user.id in admin_ids and admin_state.get(message.from_user.id) == 'waiting_for_user_id')
+async def handle_user_id(message: types.Message):
+    if message.text.isdigit():
+        user_id = int(message.text)
+        admin_state[message.from_user.id] = {'state': 'waiting_for_message', 'user_id': user_id}  # Переход к ожиданию текста сообщения
+        await message.answer(f"ID пользователя: {user_id}. Теперь напишите текст сообщения, который вы хотите отправить этому пользователю:")
+    else:
+        await message.answer("Пожалуйста, введите правильный ID пользователя.")
+
+
+# Обработчик получения сообщения от администратора
+@dp.message(lambda message: message.from_user.id in admin_ids and admin_state.get(message.from_user.id, {}).get(
+    'state') == 'waiting_for_message')
+async def handle_message_text(message: types.Message):
+    user_id = admin_state[message.from_user.id].get('user_id')
+    if user_id:
+        text = message.text
+        try:
+            # Отправляем сообщение пользователю
+            await bot.send_message(user_id, text)
+            await message.answer("Сообщение было успешно отправлено пользователю.")
+        except Exception as e:
+            await message.answer(f"Не удалось отправить сообщение пользователю. Ошибка: {e}")
+
+        # Завершаем режим
+        del admin_state[message.from_user.id]
+    else:
+        await message.answer("Произошла ошибка. Попробуйте снова.")
+
+
+# Режим постинга
+@dp.message(F.text.strip().lower() == 'режим постинга')
+async def posting_mode_command(message: types.Message):
+    if message.from_user.id in admin_ids:
+        global posting_mode
+        posting_mode = True
+        await message.answer(
+            "Вы перешли в режим постинга. Напишите сообщение, которое хотите отправить всем пользователям. "
+            "Вы можете также отправить изображение вместе с текстом.")
+
+
+# Обработчик изображений в режиме постинга
+@dp.message(lambda message: message.photo and posting_mode and message.from_user.id in admin_ids)
+async def handle_image(message: types.Message):
+    global last_uploaded_image
+
+    # Сохраняем изображение локально с оригинальным именем
+    file_id = message.photo[-1].file_id  # Получаем последний размер изображения (самый лучший)
+    file = await bot.get_file(file_id)
+    file_path = file.file_path
+
+    # Получаем имя файла из пути
+    file_name = file_path.split('/')[-1]
+    image_path = os.path.join(images_folder, file_name)
+
+    # Загружаем изображение
+    await bot.download_file(file_path, image_path)
+
+    last_uploaded_image = image_path  # Сохраняем путь к последнему загруженному изображению
+
+    await message.answer(f"Изображение сохранено как {file_name}. Теперь отправьте текст для постинга.")
+
+
+# Обработчик текстовых сообщений в режиме постинга
+@dp.message(lambda message: message.text and posting_mode and message.from_user.id in admin_ids)
+async def handle_posting_message(message: types.Message):
+    global posting_mode
+    global last_uploaded_image
+
+    if posting_mode:
+        text = message.text
+
+        if last_uploaded_image:  # Если изображение было загружено
+            # Отправляем фото с текстом всем пользователям
+            for user_id in subscribed_users:
+                try:
+                    await bot.send_photo(user_id, FSInputFile(last_uploaded_image), caption=text)
+                except Exception as e:
+                    print(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+
+            # Удаляем изображение после отправки
+            os.remove(last_uploaded_image)
+
+        else:
+            # Если изображения нет, отправляем только текст
+            for user_id in subscribed_users:
+                try:
+                    await bot.send_message(user_id, text)
+                except Exception as e:
+                    print(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+
+        # Окончание режима постинга
+        posting_mode = False
+        last_uploaded_image = None  # Сбрасываем путь к изображению
+        await message.answer("Сообщение было отправлено всем пользователям.")
+
+
+# Обработчик сообщений, отправленных пользователями, когда они в чате поддержки
+@dp.message(lambda message: user_support_state.get(message.from_user.id, False))
+async def handle_support_message(message: types.Message):
+    # Пересылаем все сообщения в поддержку администратору
+    for admin_id in admin_ids:
+        try:
+            # Сохраняем информацию о пользователе, отправившем сообщение
+            user_reply_map[message.message_id] = message.from_user.id
+            await bot.forward_message(admin_id, message.from_user.id, message.message_id)
+            # Отправляем администратору только ID пользователя в HTML формате
+            await bot.send_message(admin_id, f"<code>{message.from_user.id}</code>", parse_mode='HTML')
+        except Exception as e:
+            print(f"Ошибка при пересылке сообщения администратору {admin_id}: {e}")
+
+
+# Основная функция для запуска бота
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
