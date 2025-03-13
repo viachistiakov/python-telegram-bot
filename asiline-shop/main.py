@@ -13,7 +13,7 @@ dp = Dispatcher()
 subscribed_users = set()
 
 # Список ID администраторов
-admin_ids = {7232723935}  # Замените на ID администраторов
+admin_ids = {7232723935}
 
 # Список пользователей, которые активировали поддержку
 support_mode_users = set()
@@ -56,10 +56,71 @@ async def start_command(message: types.Message):
                                          one_time_keyboard=False,
                                          input_field_placeholder='Вы в главном меню')
     my_image = FSInputFile('torf.jpg')
-    await message.answer_photo(my_image, caption='Здравствуйте, это бот компании Asicilene для автоматических заказов',
+    await message.answer_photo(my_image, caption='Здравствуйте, это бот компании ATLANTIS для автоматических заказов',
                                reply_markup=keyboard)
 
+images = [
+    ("🔴 Красное изображение", '1 (1).jpg'),
+    ("🟠 Оранжевое изображение", '1 (2).jpg'),
+    ("🟡 Желтое изображение", '1 (3).jpg'),
+    ("🟢 Зеленое изображение", '1 (4).jpg'),
+    ("🔵 Синее изображение", '1 (5).jpg')
+]
 
+@dp.message(F.text.strip().lower() == '🌱каталог')
+async def show_catalog(message: types.Message):
+    # Возвращаем пользователя в каталог
+    kb = [
+        [KeyboardButton(text='🔴 Красное изображение')],
+        [KeyboardButton(text='🟠 Оранжевое изображение')],
+        [KeyboardButton(text='🟡 Желтое изображение')],
+        [KeyboardButton(text='🟢 Зеленое изображение')],
+        [KeyboardButton(text='🔵 Синее изображение')]
+    ]
+    keyboard = types.ReplyKeyboardMarkup(keyboard=kb,
+                                         is_persistent=True,
+                                         resize_keyboard=True,
+                                         one_time_keyboard=False,
+                                         input_field_placeholder='Каталог')
+    await message.answer("Выберите изображение из каталога:", reply_markup=keyboard)
+
+
+@dp.message(F.text.strip().lower() == '🔴 красное изображение')
+async def send_red_image(message: types.Message):
+    with open('1 (1).jpg', 'rb') as img:
+        await message.answer_photo(img, caption="🔴 Красное изображение")
+
+
+@dp.message(F.text.strip().lower() == '🟠 оранжевое изображение')
+async def send_orange_image(message: types.Message):
+    with open('1 (2).jpg', 'rb') as img:
+        await message.answer_photo(img, caption="🟠 Оранжевое изображение")
+
+
+@dp.message(F.text.strip().lower() == '🟡 желтое изображение')
+async def send_yellow_image(message: types.Message):
+    with open('1 (3).jpg', 'rb') as img:
+        await message.answer_photo(img, caption="🟡 Желтое изображение")
+
+
+@dp.message(F.text.strip().lower() == '🟢 зеленое изображение')
+async def send_green_image(message: types.Message):
+    with open('1 (4).jpg', 'rb') as img:
+        await message.answer_photo(img, caption="🟢 Зеленое изображение")
+
+
+@dp.message(F.text.strip().lower() == '🔵 синее изображение')
+async def send_blue_image(message: types.Message):
+    with open('1 (5).jpg', 'rb') as img:
+        await message.answer_photo(img, caption="🔵 Синее изображение")
+
+
+
+@dp.message(F.text.strip().lower() == '📱контакты')
+async def with_puree(message: types.Message):
+     phone_number = "+7 968 438-45-13"
+     # Используем моноширинный шрифт с HTML
+     await message.answer(f'Звонок поставщику:  <code>{phone_number}</code>', parse_mode='HTML')
 # Команда для перехода в поддержку
 @dp.message(F.text.strip().lower() == '👥связаться с поддержкой в чате')
 async def start_support(message: types.Message):
@@ -155,7 +216,6 @@ async def handle_message_text(message: types.Message):
         del admin_state[message.from_user.id]
     else:
         await message.answer("Произошла ошибка. Попробуйте снова.")
-
 
 # Режим постинга
 @dp.message(F.text.strip().lower() == 'режим постинга')
