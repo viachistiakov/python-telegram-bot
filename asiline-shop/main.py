@@ -6,26 +6,6 @@ from aiogram.types import KeyboardButton, FSInputFile, ReplyKeyboardMarkup
 from aiogram import F
 from api_token import TOKEN
 
-bot = Bot(TOKEN)
-dp = Dispatcher()
-
-# Список пользователей, которые взаимодействовали с ботом
-subscribed_users = set()
-
-# Список ID администраторов
-admin_ids = {7232723935}
-
-# Список пользователей, которые активировали поддержку
-support_mode_users = set()
-
-# Состояние поддержки для каждого пользователя
-user_support_state = {}
-
-# Словарь для хранения ID пользователей, которым администратор отвечает
-user_reply_map = {}
-
-# Состояние постинга
-posting_mode = False
 last_uploaded_image = None
 
 # Папка для сохранения изображений
