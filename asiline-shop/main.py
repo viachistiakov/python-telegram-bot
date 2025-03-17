@@ -120,58 +120,81 @@ async def start_support(message: types.Message):
 
 
 # Команда выхода из чата с поддержкой
-@dp.message(F.text.strip().lower() == '⚡ выйти из чата')
-async def exit_support(message: types.Message):
-    # Если пользователь находится в режиме поддержки, удаляем его из списка
-    if message.from_user.id in support_mode_users:
-        support_mode_users.remove(message.from_user.id)
-        user_support_state[message.from_user.id] = False  # Убираем состояние поддержки для этого пользователя
+@from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiogram.types import FSInputFile
+import os
 
-    # Возвращаем пользователя в главное меню
-    kb = [
-        [KeyboardButton(text='🚨Купить')],
-        [KeyboardButton(text='🌱Каталог')],
-        [KeyboardButton(text='📦История покупок')],
-        [KeyboardButton(text='👥Связаться с поддержкой в чате')],
-        [KeyboardButton(text='📱Контакты')]
-    ]
-    keyboard = types.ReplyKeyboardMarkup(keyboard=kb,
-                                         is_persistent=True,
-                                         resize_keyboard=True,
-                                         one_time_keyboard=False,
-                                         input_field_placeholder='Вы в главном меню')
-    await message.answer("Вы вышли из чата с поддержкой. Если нужно, вы можете вернуться заново.",
-                         reply_markup=keyboard)
+# Предполагается, что у вас уже есть bot, dp, admin_ids, subscribed_users
 
+# Вместо global posting_mode и last_uploaded_image используем данные чата
+@dp.message(lambda message: message.text and message.from_user.id in admin_ids)
+async def handle_posting_message(message: types.Message, bot: Bot):
+    chat_data = dp.chat_data.setdefault(message.chat.id, {}) # Получаем или создаем данные чата
+    posting_mode = chat_data.get('posting_mode', False) # Получаем режим публикации (по умолчанию False)
+    last_uploaded_image = chat_data.get('last_uploaded_image', None) # Получаем последнее загруженное фото (по умолчанию None)
 
-# Команда /admin для администратора
-@dp.message(Command('admin'))
-async def admin_command(message: types.Message):
-    if message.from_user.id in admin_ids:
-        kb = [
-            [KeyboardButton(text='Изменить каталог')],
-            [KeyboardButton(text='Перейти в поддержку')],
-            [KeyboardButton(text='Режим постинга')]
-        ]
-        keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-        await message.answer("Вы в админском меню. Выберите нужное действие:", reply_markup=keyboard)
+    if not posting_mode:
+        await message.reply("Режим публикации не активен.  Используйте команду /enableposting.")
+        return #Прекращаем выполнение, если режим не активен
+
+    text = message.text
+
+    if last_uploaded_image:  # Если изображение было загружено
+        # Отправляем фото с текстом всем пользователям
+        for user_id in subscribed_users:
+            try:
+                await bot.send_photo(user_id, FSInputFile(last_uploaded_image), caption=text)
+            except Exception as e:
+                print(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+
+        # Удаляем изображение после отправки
+        try:
+            os.remove(last_uploaded_image)
+        except Exception as e:
+            print(f"Ошибка при удалении файла {last_uploaded_image}: {e}")
+
+        # Очищаем last_uploaded_image в данных чата
+        chat_data['last_uploaded_image'] = None
+
     else:
-        await message.answer("У вас нет прав для использования админского меню.")
+        # Если изображения нет, отправляем только текст
+        for user_id in subscribed_users:
+            try:
+                await bot.send_message(user_id, text)
+            except Exception as e:
+                print(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
 
 
-# Команда для перехода в поддержку
-@dp.message(F.text.strip().lower() == 'перейти в поддержку')
-async def transition_to_support(message: types.Message):
-    if message.from_user.id in admin_ids:
-        admin_state[message.from_user.id] = 'waiting_for_user_id'  # Переход в режим ожидания ID
-        await message.answer("Пожалуйста, отправьте ID пользователя, которому вы хотите отправить сообщение:")
+#Пример команды для включения режима posting (добавьте, если еще нет)
+@dp.message(Command("enableposting") & F.from_user.id.in_(admin_ids))
+async def enable_posting(message: types.Message):
+    chat_data = dp.chat_data.setdefault(message.chat.id, {})
+    chat_data['posting_mode'] = True
+    await message.reply("Режим постинга включен!")
+
+#Пример команды для выключения режима posting (добавьте, если еще нет)
+@dp.message(Command("disableposting") & F.from_user.id.in_(admin_ids))
+async def disable_posting(message: types.Message):
+    chat_data = dp.chat_data.setdefault(message.chat.id, {})
+    chat_data['posting_mode'] = False
+    await message.reply("Режим постинга выключен!")
 
 
-# Обработчик получения ID пользователя от администратора
-@dp.message(lambda message: message.from_user.id in admin_ids and admin_state.get(message.from_user.id) == 'waiting_for_user_id')
-async def handle_user_id(message: types.Message):
-    if message.text.isdigit():
-        user_id = int(message.text)
+# Пример обработчика для загрузки изображений (добавьте, если еще нет)
+@dp.message(F.photo & F.from_user.id.in_(admin_ids))
+async def handle_image_upload(message: types.Message):
+    chat_data = dp.chat_data.setdefault(message.chat.id, {})
+
+    file_id = message.photo[-1].file_id  # Берем самое большое разрешение фото
+    file = await bot.get_file(file_id)
+    file_path = file.file_path
+    destination_path = f"image_{message.message_id}.jpg"  # Уникальное имя
+
+    await bot.download_file(file_path, destination_path)
+    chat_data['last_uploaded_image'] = destination_path # Сохраняем путь к файлу
+
+    await message.reply("Изображение загружено и готово к отправке.")ge.text)
         admin_state[message.from_user.id] = {'state': 'waiting_for_message', 'user_id': user_id}  # Переход к ожиданию текста сообщения
         await message.answer(f"ID пользователя: {user_id}. Теперь напишите текст сообщения, который вы хотите отправить этому пользователю:")
     else:
